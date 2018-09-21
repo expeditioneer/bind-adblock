@@ -78,7 +78,7 @@ lists = [
 ]
 
 
-def download_list(url):
+def download_list(url: str):
     headers = None
 
     cache = Path('.cache', 'bind_adblock')
@@ -115,7 +115,7 @@ def download_list(url):
             return f.read()
 
 
-def check_domain(domain, origin):
+def check_domain(domain: str, origin: dns.name.Name) -> bool:
     if domain == '':
         return False
 
@@ -127,7 +127,7 @@ def check_domain(domain, origin):
     return True
 
 
-def parse_lists(origin):
+def parse_lists(origin: str) -> str:
     domains = set()
     origin_name = dns.name.from_text(origin)
     for l in lists:
@@ -165,7 +165,7 @@ def parse_lists(origin):
     return domains
 
 
-def load_zone(zonefile, origin):
+def load_zone(zonefile: str, origin: str) -> dns.zone.Zone:
     zone_text = ''
     path = Path(zonefile)
 
@@ -188,7 +188,6 @@ def load_zone(zonefile, origin):
                 }};
         ''').format(path.resolve(), origin))
 
-
     with path.open('r') as f:
         for line in f:
             if "CNAME" in line:
@@ -198,15 +197,16 @@ def load_zone(zonefile, origin):
     return dns.zone.from_text(zone_text, origin)
 
 
-def update_serial(zone):
+def update_serial(zone: dns.zone.Zone) -> None:
     soa = zone.get_rdataset('@', dns.rdatatype.SOA)[0]
     soa.serial += 1
 
 
-def usage(code=0):
+def usage(code: int = 0) -> None:
     print('Usage: update-zonefile.py zonefile origin')
     exit(code)
 
+#---
 
 if len(sys.argv) != 3:
     usage(1)
