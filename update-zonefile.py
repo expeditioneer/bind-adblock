@@ -8,11 +8,18 @@ import re
 import textwrap
 from datetime import datetime
 from pathlib import Path
+import logging
 
 import dns.name
 import dns.zone
 import requests
 from dns.exception import DNSException
+
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+logger = logging.getLogger(__name__)
+
 
 config = {
     # Blocklist download request timeout
@@ -73,7 +80,7 @@ lists = [
 
     # Other stuff from notrack-blocklists
     # {'url': 'https://gitlab.com/quidsup/notrack-blocklists/raw/master/notrack-blocklist.txt', 'filter': 'regex_no_comment'},
-    {'url': 'https://gitlab.com/quidsup/notrack-blocklists/raw/master/notrack-malware.txt', 'filter': regex_no_comment}
+     {'url': 'https://gitlab.com/quidsup/notrack-blocklists/raw/master/notrack-malware.txt'}
 
 ]
 
@@ -106,9 +113,9 @@ def download_list(url: str):
 
             return r.text
         elif r.status_code != 304:
-            print("Error getting list at " + url + " HTTP STATUS:" + str(r.status_code))
+            logger.error("Error getting list at " + url + " HTTP STATUS:" + str(r.status_code))
     except requests.exceptions.RequestException as e:
-        print(e)
+        logger.error(e)
 
     if cache.is_file():
         with cache.open() as f:
@@ -133,10 +140,10 @@ def parse_lists(origin: str) -> str:
     for l in lists:
         data = download_list(l['url'])
         if data:
-            print(l["url"])
+            logger.info(l["url"])
 
             lines = data.splitlines()
-            print("\t{} lines".format(len(lines)))
+            logger.info("\t{} lines".format(len(lines)))
 
             c = len(domains)
 
@@ -159,9 +166,9 @@ def parse_lists(origin: str) -> str:
                 if check_domain(domain, origin_name):
                     domains.add(domain)
 
-            print("\t{} domains".format(len(domains) - c))
+            logger.info("\t{} domains".format(len(domains) - c))
 
-    print("\nTotal\n\t{} domains".format(len(domains)))
+    logger.info("\nTotal\n\t{} domains".format(len(domains)))
     return domains
 
 
@@ -172,9 +179,17 @@ def load_zone(zonefile: str, origin: str) -> dns.zone.Zone:
     if not path.exists():
         with path.open('w') as f:
             f.write(
-                '$TTL 8600\n@       IN SOA  admin. need.to.know.only. (\n                   20170212        ; Serial number\n                       3600        ; Refresh 1 hour\n                  600     ; retry 10 minutes\n                    86400       ; expiry 24 hours\n                 600         ; min ttl 10 minutes )\n@   IN NS   LOCALHOST.'.format(
-                    origin))
-        print(textwrap.dedent('''\
+                '$TTL 8600\n'
+                '@       IN SOA  admin. need.to.know.only. ('
+                '\n                   20170212        ; Serial number'
+                '\n                       3600        ; Refresh 1 hour'
+                '\n                  600     ; retry 10 minutes'
+                '\n                    86400       ; expiry 24 hours'
+                '\n                 600         ; min ttl 10 minutes )'
+                '\n@   IN NS   LOCALHOST.'
+                .format(origin))
+
+        logger.info(textwrap.dedent('''\
                 Zone file "{0}" created.
 
                 Add BIND options entry:
@@ -204,6 +219,8 @@ def update_serial(zone: dns.zone.Zone) -> None:
     soa.serial += 1
 
 
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('zonefile', help='the name of the generated file', type=str)
 parser.add_argument('origin', help='Currently unclear :-/', type=str)
@@ -226,4 +243,4 @@ with Path(zonefile).open('a') as f:
         if config['wildcard_block']:
             f.write('*.' + d + ' IN CNAME drop.sinkhole.\n')
 
-print("Done")
+logger.info("Done")
