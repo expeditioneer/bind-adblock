@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 
+import argparse
 import email.utils as eut
 import hashlib
 import os
 import re
-import sys
 import textwrap
 from datetime import datetime
 from pathlib import Path
@@ -171,7 +171,9 @@ def load_zone(zonefile: str, origin: str) -> dns.zone.Zone:
 
     if not path.exists():
         with path.open('w') as f:
-            f.write('$TTL 8600\n@       IN SOA  admin. need.to.know.only. (\n                   20170212        ; Serial number\n                       3600        ; Refresh 1 hour\n                  600     ; retry 10 minutes\n                    86400       ; expiry 24 hours\n                 600         ; min ttl 10 minutes )\n@   IN NS   LOCALHOST.'.format(origin))
+            f.write(
+                '$TTL 8600\n@       IN SOA  admin. need.to.know.only. (\n                   20170212        ; Serial number\n                       3600        ; Refresh 1 hour\n                  600     ; retry 10 minutes\n                    86400       ; expiry 24 hours\n                 600         ; min ttl 10 minutes )\n@   IN NS   LOCALHOST.'.format(
+                    origin))
         print(textwrap.dedent('''\
                 Zone file "{0}" created.
 
@@ -202,17 +204,14 @@ def update_serial(zone: dns.zone.Zone) -> None:
     soa.serial += 1
 
 
-def usage(code: int = 0) -> None:
-    print('Usage: update-zonefile.py zonefile origin')
-    exit(code)
+parser = argparse.ArgumentParser()
+parser.add_argument('zonefile', help='the name of the generated file', type=str)
+parser.add_argument('origin', help='Currently unclear :-/', type=str)
 
-#---
+args = parser.parse_args()
 
-if len(sys.argv) != 3:
-    usage(1)
-
-zonefile = sys.argv[1]
-origin = sys.argv[2]
+zonefile = args.zonefile
+origin = args.origin
 
 zone = load_zone(zonefile, origin)
 update_serial(zone)
