@@ -1,0 +1,9 @@
+[Unit]
+Description=BIND DNS blacklist zone update
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c "/usr/bin/python /usr/local/bin/update-zonefile.py /var/bind/rpz/blacklist.zone rpz.blacklist --reload-zone"
+
+[Install]
+WantedBy=multi-user.target

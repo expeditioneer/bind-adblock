@@ -8,7 +8,6 @@ import os
 import re
 import subprocess
 import textwrap
-from collections import Set
 from datetime import datetime
 from pathlib import Path
 
@@ -161,7 +160,7 @@ def check_domain(domain: str, origin: dns.name.Name) -> bool:
     return True
 
 
-def parse_lists(origin: str) -> Set[str]:
+def parse_lists(origin: str) -> str:
     domains = set()
     origin_name = dns.name.from_text(origin)
     for l in lists:
@@ -260,7 +259,12 @@ args = parser.parse_args()
 zonefile = args.zonefile
 origin = args.origin
 
-set_log_level(args.verbose)
+if args.verbose:
+    set_log_level(args.verbose)
+elif args.quiet:
+    quiet_mode()
+else:
+    set_log_level(1)
 
 if args.print_bind_config:
     print_usage(zonefile, origin)
