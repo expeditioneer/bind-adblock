@@ -1,0 +1,8 @@
+[Unit]
+Description=Run update of BIND DNS blacklist zonefile
+
+[Timer]
+OnCalendar=*-*-* 2:00:00
+
+[Install]
+WantedBy=timers.target
