@@ -5,74 +5,50 @@ import email.utils as eut
 import hashlib
 import logging
 import os
-import re
 import subprocess
 import textwrap
 from datetime import datetime
 from pathlib import Path
+from random import choice
 
+import dns.inet
 import dns.name
 import dns.zone
 import requests
+from dateutil.parser import parse as parsedate
 from dns.exception import DNSException
+
+from typing import List
+
+from jinja2 import Template
 
 logger = logging.getLogger(__name__)
 
-config = {
+desktop_agents = [
+    'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/602.2.14 (KHTML, like Gecko) Version/10.0.1 Safari/602.2.14',
+    'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.98 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.98 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; WOW64; rv:50.0) Gecko/20100101 Firefox/50.0']
+
+settings = {
+    # Config directory
+    'config_directory': '/etc/bind-adblock',
+    'cache_directory': '/var/cache/bind-adblock',
     # Blocklist download request timeout
     'req_timeout_s': 50,
     # Also block *.domain.tld
     'wildcard_block': False
 }
 
-regex_domain_with_ip = "^(0.0.0.0|127.0.0.1)\s+(?P<domain>([a-z0-9_-]+\.)+[a-z]+)"
-regex_extract_domain = "(?P<domain>^[a-z0-9-.]+\.[a-z]{1,})\s*.*$"
-regex_domain_from_url = "(https?:\/\/)?(www\.)?(?P<domain>[a-zA-Z0-9-.]+)"
 
-lists = [
-    {'url': 'https://pgl.yoyo.org/as/serverlist.php?hostformat=nohtml&showintro=0', 'regex': regex_extract_domain},
-    {'url': 'http://mirror1.malwaredomains.com/files/justdomains', 'regex': regex_extract_domain},
-    {'url': 'http://winhelp2002.mvps.org/hosts.txt', 'regex': regex_domain_with_ip},
-    {'url': 'https://adaway.org/hosts.txt', 'regex': regex_domain_with_ip},
-    {'url': 'http://someonewhocares.org/hosts/zero/hosts', 'regex': regex_domain_with_ip},
-    {'url': 'http://www.malwaredomainlist.com/hostslist/hosts.txt', 'regex': regex_domain_with_ip},
-    # StevenBlack's list
-    {'url': 'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts', 'regex': regex_domain_with_ip},
-    # Cameleon
-    {'url': 'http://sysctl.org/cameleon/hosts', 'regex': regex_domain_with_ip},
-    # Zeustracker
-    {'url': 'https://zeustracker.abuse.ch/blocklist.php?download=domainblocklist', 'regex': regex_extract_domain},
-    # hpHosts
-    {'url': 'https://hosts-file.net/download/hosts.txt', 'regex': regex_domain_with_ip},
-    # OpenPhish
-    {'url': 'https://openphish.com/feed.txt', 'regex': regex_domain_from_url},
-    # CyberCrime tracker
-    {'url': 'http://cybercrime-tracker.net/all.php', 'regex': regex_domain_from_url}, # TODO: ip addresses are still there
-    # Free Ads BL from SquidBlacklist
-    {'url': 'http://www.squidblacklist.org/downloads/dg-ads.acl', 'regex': regex_extract_domain},
-
-    # Disconnect.me
-    {'url': 'https://s3.amazonaws.com/lists.disconnect.me/simple_malvertising.txt', 'regex': regex_extract_domain},
-    {'url': 'https://s3.amazonaws.com/lists.disconnect.me/simple_malware.txt', 'regex': regex_extract_domain},
-    {'url': 'https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt', 'regex': regex_extract_domain},
-    {'url': 'https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt', 'regex': regex_extract_domain},
-
-    # Tracking & Telemetry & Advertising
-    {'url': 'https://v.firebog.net/hosts/Easyprivacy.txt', 'regex': regex_extract_domain},
-    {'url': 'https://v.firebog.net/hosts/Easylist.txt', 'regex': regex_extract_domain},
-    {'url': 'https://v.firebog.net/hosts/AdguardDNS.txt', 'regex': regex_extract_domain},
-
-    # Malicious list
-    {'url': 'http://v.firebog.net/hosts/Shalla-mal.txt', 'regex': regex_extract_domain},
-    {'url': 'https://v.firebog.net/hosts/Cybercrime.txt', 'regex': regex_extract_domain},
-    {'url': 'https://v.firebog.net/hosts/APT1Rep.txt', 'regex': regex_extract_domain},
-    {'url': 'http://www.joewein.net/dl/bl/dom-bl.txt', 'regex': regex_extract_domain},
-    {'url': 'https://isc.sans.edu/feeds/suspiciousdomains_Medium.txt', 'regex': regex_extract_domain},
-
-    # Other stuff from notrack-blocklists
-    {'url': 'https://gitlab.com/quidsup/notrack-blocklists/raw/master/notrack-blocklist.txt', 'regex': regex_extract_domain},
-    {'url': 'https://gitlab.com/quidsup/notrack-blocklists/raw/master/notrack-malware.txt', 'regex': regex_extract_domain}
-]
+def set_logging_basic_configuration(level: int) -> None:
+    logging.basicConfig(level=level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 def set_log_level(verbosity: int) -> None:
@@ -81,12 +57,12 @@ def set_log_level(verbosity: int) -> None:
         log_level = logging.INFO
     elif verbosity >= 3:
         log_level = logging.DEBUG
-    logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    set_logging_basic_configuration(log_level)
 
 
-def quiet_mode() -> None:
+def set_quiet_mode() -> None:
     log_level = logging.FATAL
-    logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    set_logging_basic_configuration(log_level)
 
 
 def print_usage(zonefile: str, origin: str) -> None:
@@ -113,43 +89,86 @@ def print_usage(zonefile: str, origin: str) -> None:
     logging.getLogger().setLevel(current_log_level)
 
 
-def download_list(url: str):
-    headers = None
+def is_comment_line(line: str) -> bool:
+    return line.startswith('#')
 
-    cache = Path('.cache', 'bind_adblock')
+
+def is_empty_line(line: str) -> bool:
+    return line == ''
+
+
+def remove_comments_and_empty_lines(lst: List[str]) -> List[str]:
+    return list((_ for _ in lst if not is_empty_line(_) and not is_comment_line(_)))
+
+
+def is_ip_address(line: str) -> bool:
+    return dns.inet.is_address(line.split('/')[0])
+
+
+def get_blocklist_content(url: str) -> List[str]:
+    last_modified_cache: datetime = datetime.fromtimestamp(0).astimezone()
+
+    cache = Path(settings['cache_directory'])
     if not cache.is_dir():
         cache.mkdir(parents=True)
+
     cache = Path(cache, hashlib.sha1(url.encode()).hexdigest())
 
     if cache.is_file():
-        last_modified = datetime.utcfromtimestamp(cache.stat().st_mtime)
-        headers = {
-            'If-modified-since': eut.format_datetime(last_modified),
-            'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36'
-        }
+        last_modified_cache = datetime.fromtimestamp(os.path.getmtime(cache)).astimezone()
 
-    try:
-        r = requests.get(url, headers=headers, timeout=config['req_timeout_s'])
+    headers = {
+        'If-modified-since': eut.format_datetime(last_modified_cache),
+        'User-Agent': choice(desktop_agents)
+    }
 
-        if r.status_code == 200:
-            with cache.open('w') as f:
-                f.write(r.text)
+    r = requests.get(url, headers=headers, timeout=settings['req_timeout_s'])
 
-            if 'last-modified' in r.headers:
-                last_modified = eut.parsedate_to_datetime(r.headers['last-modified']).timestamp()
-                os.utime(str(cache), times=(last_modified, last_modified))
+    url_time = r.headers['last-modified']
+    last_modified_source = parsedate(url_time)
 
-            return r.text
-        elif r.status_code != 304:
-            logger.error(f'''Error getting list at {url} HTTP STATUS: {r.status_code}''')
-    except requests.exceptions.RequestException as e:
-        logger.error(e)
+    if last_modified_source > last_modified_cache:
+        try:
+            if r.status_code == 200:
+                received_lines = r.text.split('\n')
 
-    if cache.is_file():
-        with cache.open() as f:
-            return f.read()
+                with cache.open('w') as file:
+
+                    len_list_original = len(received_lines)
+                    data = remove_comments_and_empty_lines(r.text.split('\n'))
+                    logger.info(f'''\t {len_list_original - len(data):7} empty or lines with comments removed''')
+
+                    len_list_before_removal_of_ip_addresses = len(data)
+                    data = list((x for x in data if not is_ip_address(x)))
+                    logger.info(f'''\t {len_list_before_removal_of_ip_addresses - len(data):7} lines with IP adresses removed''')
+
+                    data.sort()
+
+                    for element in data:
+                        element.lower()  # lowering since DNS is case insensitive
+                        file.write(element)
+                        file.write('\n')
+                    file.close()
+
+                if 'last-modified' in r.headers:
+                    last_modified = eut.parsedate_to_datetime(r.headers['last-modified']).timestamp()
+                    os.utime(str(cache), times=(last_modified, last_modified))
+
+                return data
+
+            elif r.status_code != 304:
+                logger.error(f'''Error getting list at {url}, HTTP STATUS: {r.status_code}''')
+        except requests.exceptions.RequestException as e:
+            logger.error(e)
+
+    else:
+        logger.info(f'''\t no update found - using cached file''')
+
+        with cache.open() as file:
+            return [i.strip() for i in file.readlines()]
 
 
+# TEST: WHY?
 def check_domain(domain: str, origin: dns.name.Name) -> bool:
     if domain == '':
         return False
@@ -160,77 +179,29 @@ def check_domain(domain: str, origin: dns.name.Name) -> bool:
     return True
 
 
-def parse_lists(origin: str) -> str:
-    domains = set()
-    origin_name = dns.name.from_text(origin)
-    for l in lists:
-        data = download_list(l['url'])
-        if data:
-            logger.info(l["url"])
+def get_blocked_url_list(blocklist_urls: List) -> List[str]:
+    domains: List[str] = list()
+#    origin_name = dns.name.from_text(origin)
 
-            logger.info(f'''\t {len(data.splitlines()):5} lines in file''')
+    for blocklist_url in blocklist_urls:
+        logger.info(f'''Processing Blocklist: {blocklist_url}''')
+        url_list = get_blocklist_content(blocklist_url)
+        domains.extend(url_list)
 
-            # lowering since DNS is case insensitive
-            data = data.lower()
+    total_domains = len(domains)
+    domains = sorted(set(domains))
 
-            # remove empty lines and comment only lines
-            comment_lines = re.findall('^(\s|\t)*#.*|^\s+', data, re.MULTILINE)
-            data = re.sub('^(\s|\t)*#.*\n|^\n', '', data, flags=re.MULTILINE)
-            data = re.sub('\n{2,}', '\n', data)
-            logger.info(f'''\t {len(comment_lines):5} empty lines or lines with comments removed''')
-
-            lines = data.splitlines()
-            logger.info(f'''\t {len(lines):5} are now processed''')
-
-            c = len(domains)
-
-            counter_already_present_lines = 0
-            for line in data.splitlines():
-                domain = ''
-
-                if 'regex' in l:
-                    m = re.match(l['regex'], line)
-                    if m:
-                        domain = m.group('domain')
-                    else:
-                        logger.debug(f'''\t\t no match found in line "{line}"''')
-                else:
-                    domain = line
-
-                domain = domain.strip()
-                if check_domain(domain, origin_name):
-                    if domain not in domains:
-                        domains.add(domain)
-                    else:
-                        # logger.debug(f''''\t\t domain "{domain}" already in blacklist''')
-                        counter_already_present_lines += 1
-
-            logger.info(f'''\t {counter_already_present_lines:5} were already on the blacklist''')
-            logger.info(f'''\t {(len(domains) - c):5} domains were added to blacklist''')
-
-    logger.info(f'''Blacklist contains {len(domains):6} domains ''')
+    logger.info(f'''{total_domains - len(domains):7} duplicate entries removed''')
+    logger.info(f'''{len(domains):7} domains on Blacklist''')
     return domains
 
 
-def create_header_for_zonefile(origin: str) -> dns.zone.Zone:
-    now = datetime.now()
-
-    zone_text = f'''$TTL 8600
-@ IN SOA  admin. postmaster.{origin}. (
-        {now.year}{now.month}{now.day}01    ; Serial number
-                             3600           ; Refresh 1 hour
-                              600           ; retry 10 minutes
-                            86400           ; expiry 24 hours'
-                              600 )         ; min ttl 10 minutes
-
-@ IN NS   LOCALHOST.'''
-
-    return dns.zone.from_text(zone_text, origin)
-
-
-def update_serial(zone: dns.zone.Zone) -> None:
-    soa = zone.get_rdataset('@', dns.rdatatype.SOA)[0]
-    soa.serial += 1
+def read_blocklists_file() -> List[str]:
+    with open(f'''{settings['config_directory']}/blocklists.conf''', 'r') as file_handle:
+        # convert file contents into a list
+        lists = file_handle.read().splitlines()
+        lists[:] = remove_comments_and_empty_lines(lists)
+    return lists[:]
 
 
 def reload_zone(origin):
@@ -239,50 +210,54 @@ def reload_zone(origin):
         raise Exception(f'''rndc failed with return code {r}''')
 
 
-parser = argparse.ArgumentParser()
+def main():
+    parser = argparse.ArgumentParser()
 
-parser.add_argument('zonefile', help='name of the generated file', type=str)
-parser.add_argument('origin', help='name of the zone', type=str)
+    parser.add_argument('zonefile', help='name of the zone file to generate', type=str)
+    parser.add_argument('origin', help='name of the zone', type=str)
 
-group = parser.add_mutually_exclusive_group()
-group.add_argument('-v', '--verbose', action='count',
-                   help='increase verbosity (specify multiple times for more output)')
-group.add_argument('-q', '--quiet', action='store_true', help='suppress output, except fatal messages')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-v', '--verbose', action='count',
+                       help='increase verbosity (specify multiple times for more output)')
 
-parser.add_argument('--print-bind-config', action='store_true',
-                    help='print necessary configuration of BIND to use the generated file')
+    group.add_argument('-q', '--quiet', action='store_true', help='suppress output, except fatal messages')
 
-parser.add_argument('--reload-zone', action='store_true', help='trigger a reload of the zone after update')
+    parser.add_argument('--print-bind-config', action='store_true',
+                        help='print necessary configuration of BIND to use the generated file')
 
-args = parser.parse_args()
+    parser.add_argument('--reload-zone', action='store_true', help='trigger a reload of the zone after update')
 
-zonefile = args.zonefile
-origin = args.origin
+    args = parser.parse_args()
 
-if args.verbose:
-    set_log_level(args.verbose)
-elif args.quiet:
-    quiet_mode()
-else:
-    set_log_level(1)
+    zonefile = args.zonefile
+    origin = args.origin
 
-if args.print_bind_config:
-    print_usage(zonefile, origin)
+    if args.verbose:
+        set_log_level(args.verbose)
+    elif args.quiet:
+        set_quiet_mode()
+    else:
+        set_log_level(1)
 
-zone = create_header_for_zonefile(origin)
+    if args.print_bind_config:
+        print_usage(zonefile, origin)
 
-domains = parse_lists(origin)
+    blocklists_urls: List[str] = list(read_blocklists_file())
 
-zone.to_file(zonefile)
+    domains: List[str] = get_blocked_url_list(blocklists_urls)
 
-with Path(zonefile).open('a') as f:
-    for d in (sorted(domains)):
-        f.write(d + ' IN CNAME drop.sinkhole.\n')
-        if config['wildcard_block']:
-            f.write('*.' + d + ' IN CNAME drop.sinkhole.\n')
+    template = Template(open('blocklist.zone.j2').read())
+    rendered = template.render(origin=origin, now=datetime.now(), wildcard_block=settings['wildcard_block'], domains=domains)
 
-logger.info('Zonefile generation complete')
+    logger.info('Generating Zonefile ...')
+    with open(zonefile, 'w') as fh:
+        fh.write(rendered)
+    logger.info('Zonefile generation complete')
 
-if args.reload_zone:
-    logger.debug(f'''Reload of zone will be done now''')
-    reload_zone(origin)
+    if args.reload_zone:
+        logger.debug(f'''Reload of zone will be done now''')
+        reload_zone(origin)
+
+
+if __name__ == "__main__":
+    main()

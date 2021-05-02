@@ -1,0 +1,16 @@
+$TTL 8600
+@ IN SOA admin. postmaster.{{ origin }}. (
+        {{ now.year }}{{ now.month }}{{ now.day }}01    ; Serial number
+        3600            ; Refresh 1 hour
+        600             ; retry 10 minutes
+        86400           ; expiry 24 hours'
+        600 )           ; min ttl 10 minutes
+
+@ IN NS LOCALHOST.
+
+{%-  for domain in domains %}
+{{ domain }} IN CNAME drop.sinkhole
+{%-  if wildcard_block %}
+*.{{ domain }} IN CNAME drop.sinkhole
+{%- endif %}
+{%- endfor %}
