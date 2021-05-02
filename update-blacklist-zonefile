@@ -168,17 +168,6 @@ def get_blocklist_content(url: str) -> List[str]:
             return [i.strip() for i in file.readlines()]
 
 
-# TEST: WHY?
-def check_domain(domain: str, origin: dns.name.Name) -> bool:
-    if domain == '':
-        return False
-    try:
-        dns.name.from_text(domain, origin)
-    except DNSException:
-        return False
-    return True
-
-
 def get_blocked_url_list(blocklist_urls: List) -> List[str]:
     domains: List[str] = list()
 #    origin_name = dns.name.from_text(origin)
