@@ -9,7 +9,7 @@ Requires BIND 9.8 or newer for [RPZ](https://en.wikipedia.org/wiki/Response_poli
 The sources can be configured with the blocklists.conf file
 
 ## Setup
-Copy the `update-zonefile.py` script to `/usr/local/bin`.
+Copy the `update-blacklist-zonefile` script to `/usr/local/bin`.
 Copy the `update-blacklist-zonefile.service` and `update-blacklist-zonefile.timer` into `/etc/systemd/system`.
 
 Afterwards execute
@@ -33,9 +33,9 @@ These packages need to be installed to run the update script.
 
 
 ## Usage
-Useage of the 'update-zonefile.py' script
+Usage of the `update-blacklist-zonefile` script
 ```text
-usage: update-zonefile.py [-h] [-v | -q] [--print-bind-config] [--reload-zone]
+usage: update-blacklist-zonefile [-h] [-v | -q] [--print-bind-config] [--reload-zone]
                       zonefile origin
 
 positional arguments:
@@ -50,7 +50,7 @@ optional arguments:
   --reload-zone        trigger a reload of the zone after update
 ```
 
-Example: `update-zonefile.py /var/bind/rpz/blacklist.zone rpz.blacklist -q --reload-zone`
+Example: `update-blacklist-zonefile /var/bind/rpz/blacklist.zone rpz.blacklist -q --reload-zone`
 
-`update-zonefile.py` will update the zone file with the fetched server lists and issue a `rndc reload origin` afterwards.
+`update-blacklist-zonefile` will update the zone file with the fetched server lists and issue a `rndc reload origin` afterwards.
 
