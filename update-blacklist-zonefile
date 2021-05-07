@@ -16,7 +16,6 @@ import dns.name
 import dns.zone
 import requests
 from dateutil.parser import parse as parsedate
-from dns.exception import DNSException
 
 from typing import List
 
