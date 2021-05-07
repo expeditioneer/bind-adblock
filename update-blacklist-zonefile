@@ -139,7 +139,7 @@ def get_blocklist_content(url: str) -> List[str]:
                     logger.info(f'''\t {len_list_original - len(data):7} empty or lines with comments removed''')
 
                     len_list_before_removal_of_ip_addresses = len(data)
-                    data = list((x for x in data if not is_ip_address(x)))
+                    data = list((x.split(' ')[0] for x in data if not is_ip_address(x)))
                     logger.info(f'''\t {len_list_before_removal_of_ip_addresses - len(data):7} lines with IP adresses removed''')
 
                     data.sort()
