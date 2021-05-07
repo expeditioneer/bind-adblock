@@ -9,8 +9,8 @@ $TTL 8600
 @ IN NS LOCALHOST.
 
 {%-  for domain in domains %}
-{{ domain }} IN CNAME drop.sinkhole
+{{ domain }} IN CNAME drop.sinkhole.
 {%-  if wildcard_block %}
-*.{{ domain }} IN CNAME drop.sinkhole
+*.{{ domain }} IN CNAME drop.sinkhole.
 {%- endif %}
 {%- endfor %}
