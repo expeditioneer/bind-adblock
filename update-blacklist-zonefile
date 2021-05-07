@@ -75,7 +75,7 @@ def print_usage(zonefile: str, origin: str) -> None:
 
             Add BIND options entry:
             response-policy {{
-                zone "{origin}"
+                zone "{origin}";
             }};
 
             Add BIND zone entry:
