@@ -234,7 +234,7 @@ def main():
 
     domains: List[str] = get_blocked_url_list(blocklists_urls)
 
-    template = Template(open('blocklist.zone.j2').read())
+    template = Template(open('/usr/lib/bind-adblock/blocklist.zone.j2').read())
     rendered = template.render(origin=origin, now=datetime.now(), wildcard_block=settings['wildcard_block'], domains=domains)
 
     logger.info('Generating Zonefile ...')
