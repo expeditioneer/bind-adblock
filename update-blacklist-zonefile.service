@@ -3,9 +3,9 @@ Description=BIND DNS blacklist zone update
 
 [Service]
 Type=oneshot
-User=named
+User=root
 Group=named
-ExecStart=/bin/bash -c "/usr/bin/python /usr/local/bin/update-blacklist-zonefile /var/bind/rpz/blacklist.zone rpz.blacklist --reload-zone"
+ExecStart=/bin/bash -c "/usr/bin/python /usr/bin/update-blacklist-zonefile /var/bind/rpz/blacklist.zone rpz.blacklist --reload-zone"
 
 [Install]
 WantedBy=multi-user.target
