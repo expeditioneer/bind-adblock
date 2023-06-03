@@ -1,3 +1,11 @@
+> **⚠️ Archived — no longer maintained.**
+> I no longer use BIND for DNS-level filtering, so this project has been
+> retired. The script is kept here for reference and may become outdated as
+> BIND, RPZ behaviour, and the upstream blocklists evolve. Use at your own
+> risk.
+
+---
+
 # BIND ad blocker
 
 Fetch various blocklists and generate a BIND zone from them.
