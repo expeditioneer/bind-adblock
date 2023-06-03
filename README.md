@@ -1,3 +1,7 @@
+# DEPRECATED
+
+No longer maintained. I personally don't use this any longer.
+
 # BIND ad blocker
 
 Fetch various blocklists and generate a BIND zone from them.
